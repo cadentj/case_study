@@ -3,34 +3,34 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-def full_rome_causal_tracing(model, prompt, target):
-
-    n_tokens = len(prompt)
+def full_rome_causal_tracing(model, prompt):
+    prompt = model.tokenizer.encode(prompt)
+    answer_token = model.tokenizer.encode(" Seattle")
     layers = model.transformer.h
     lm_head = model.lm_head
     embedding = model.transformer.wte
     with model.trace() as tracer:
-        clean_acts = {}
+        clean_acts = []
         with tracer.invoke(prompt):
             for layer in layers:
-                clean_acts[layer] = layer.output[0]
-            # Save probability over the target token
+                clean_acts.append(layer.output[0])
+            # Save probability over the answer token
             probs = lm_head.output.softmax(-1)
-            clean_value = probs[:,-1, target]
+            clean_value = probs[:,-1, answer_token]
         results = []
-        for t in range(n_tokens):
+        for token in range(len(prompt)):
             per_token_result = []
-            for layer in layers:
+            for layer_idx, layer in enumerate(layers):
                 with tracer.invoke(prompt):
                     # Corrupt the subject tokens
                     embedding.output[:,0:3,:][:] = 0.
                     # Restore the clean activations
-                    clean_token_act = clean_acts[layer][:,t,:]
-                    layer.output[0][:,t,:] = clean_token_act
-                    # Save probability over the target token
+                    clean_token_act = clean_acts[layer_idx][:,token,:]
+                    layer.output[0][:,token,:] = clean_token_act
+                    # Save probability over the answer token
                     probs = lm_head.output.softmax(-1)
                     # Compute difference in clean and corrupted
-                    corrupted_value = probs[:,-1, target]
+                    corrupted_value = probs[:,-1, answer_token]
                     diff = clean_value - corrupted_value
                     per_token_result.append(diff.item().save())
             results.append(per_token_result)
