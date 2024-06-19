@@ -35,6 +35,7 @@ def full_rome_causal_tracing(model, prompt, target):
                     per_token_result.append(diff.item().save())
             results.append(per_token_result)
 
+# Split into separate traces as not to overload CUDA memory
 def low_memory_rome_causal_tracing(model, prompt, target):
 
     clean_acts = []
@@ -72,27 +73,22 @@ def low_memory_rome_causal_tracing(model, prompt, target):
 
     return results
 
-def plot(results, str_tokens, save_name="plot.png"):
-    y_labels = str_tokens
+def plot(results, y_labels, save_name="plot.png"):
 
-    fig, ax = plt.subplots()
-
+    fig, ax = plt.subplots(figsize=(10, 8))
     cax = ax.imshow(results, cmap='Purples_r', aspect='auto')
+    fig.colorbar(cax, ax=ax, orientation='vertical')
 
-    # Set the y-axis labels
     ax.set_yticks(np.arange(len(y_labels)))
     ax.set_yticklabels(y_labels)
-
-    # Set the labels for the axes
     ax.set_xlabel('single restored layer within GPT-2-XL')
-
-    fig.colorbar(cax, ax=ax, orientation='vertical')
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
     save_path = os.path.join(script_dir, save_name)
     plt.savefig(save_path)
 
 def cast_value_array_to_real(results):
+    # Call .value to not throw matplot errors
     new_results = []
     for i in results:
         row = []
@@ -105,16 +101,20 @@ def cast_value_array_to_real(results):
 
 ############### BODY ###############
 
+# Declare model and tokenizer
 model = LanguageModel("openai-community/gpt2-xl", device_map="auto")
 tokenizer = model.tokenizer
 
+# Define prompt 
 prompt = "The Space Needle is in downtown"
 tokenized_prompt = tokenizer.encode(prompt)
 str_tokens = [tokenizer.decode(t) for t in tokenized_prompt]
 
+# Define target token
 target = " Seattle"
 target_token = tokenizer.encode(target)
 
+# Run experiments
 results = low_memory_rome_causal_tracing(model, tokenized_prompt, target_token)
 results = cast_value_array_to_real(results)
 plot(results, str_tokens)
